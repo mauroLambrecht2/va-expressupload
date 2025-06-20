@@ -50,10 +50,16 @@ app.use(helmet({
 }));
 
 // Strict CORS for production
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+    ? [process.env.FRONTEND_URL, process.env.BACKEND_URL].filter(Boolean)
+    : true;
+
+console.log('🔧 CORS Configuration:');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('Allowed Origins:', allowedOrigins);
+
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-        ? [process.env.FRONTEND_URL, process.env.BACKEND_URL].filter(Boolean)
-        : true,
+    origin: allowedOrigins,
     credentials: true,
     optionsSuccessStatus: 200
 }));
