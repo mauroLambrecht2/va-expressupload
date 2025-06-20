@@ -13,7 +13,8 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
 const app = express();
-const PORT = process.env.PORT || 8000;
+// Production: Use platform-provided PORT (80/443), Development: Use 8000
+const PORT = process.env.PORT || (process.env.NODE_ENV === 'production' ? 80 : 8000);
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 // Middleware - Enhanced Security
