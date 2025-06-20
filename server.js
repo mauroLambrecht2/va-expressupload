@@ -44,8 +44,8 @@ app.use(cors({
     optionsSuccessStatus: 200
 }));
 app.use(morgan('combined'));
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '250mb' }));
+app.use(express.urlencoded({ extended: true, limit: '250mb' }));
 
 // Serve React build in production
 if (process.env.NODE_ENV === 'production') {
@@ -114,7 +114,7 @@ const upload = multer({
     storage,
     fileFilter,
     limits: {
-        fileSize: 100 * 1024 * 1024 // 100MB
+        fileSize: 250 * 1024 * 1024 // 250MB
     }
 });
 
