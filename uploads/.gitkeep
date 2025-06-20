@@ -1,0 +1,2 @@
+# This file ensures the uploads directory is included in version control
+# while ignoring all uploaded video files
