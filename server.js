@@ -11,10 +11,24 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const { v2: cloudinary } = require('cloudinary');
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Debug: Check if Cloudinary is configured
+console.log('🔧 Cloudinary Config Check:');
+console.log('Cloud Name:', process.env.CLOUDINARY_CLOUD_NAME ? '✅ Set' : '❌ Missing');
+console.log('API Key:', process.env.CLOUDINARY_API_KEY ? '✅ Set' : '❌ Missing');
+console.log('API Secret:', process.env.CLOUDINARY_API_SECRET ? '✅ Set' : '❌ Missing');
 
 const app = express();
-// Production: Use platform-provided PORT (80/443), Development: Use 8000
-const PORT = process.env.PORT || (process.env.NODE_ENV === 'production' ? 80 : 8000);
+// Always use 8000 for development, let hosting platforms set PORT in production
+const PORT = process.env.PORT || 8000;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 // Middleware - Enhanced Security
@@ -44,8 +58,17 @@ app.use(cors({
     optionsSuccessStatus: 200
 }));
 app.use(morgan('combined'));
-app.use(express.json({ limit: '250mb' }));
-app.use(express.urlencoded({ extended: true, limit: '250mb' }));
+// Remove JSON/URLencoded limits for file uploads - multer handles the file size limit
+app.use(express.json({ limit: '1mb' })); // Keep small for non-file requests
+app.use(express.urlencoded({ extended: true, limit: '1mb' })); // Keep small for non-file requests
+
+// Add request logging for debugging
+app.use((req, res, next) => {
+    if (req.path === '/upload') {
+        console.log(`📤 Upload request - Size: ${req.get('content-length')} bytes, IP: ${req.ip}`);
+    }
+    next();
+});
 
 // Serve React build in production
 if (process.env.NODE_ENV === 'production') {
@@ -74,17 +97,8 @@ const apiLimit = rateLimit({
 
 app.use('/api', apiLimit);
 
-// Storage configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        const uniqueId = uuidv4();
-        const extension = path.extname(file.originalname);
-        cb(null, `${uniqueId}${extension}`);
-    }
-});
+// Storage configuration - Use memory storage for Cloudinary upload
+const storage = multer.memoryStorage();
 
 // Enhanced file filter with virus scanning simulation
 const fileFilter = (req, file, cb) => {
@@ -114,7 +128,7 @@ const upload = multer({
     storage,
     fileFilter,
     limits: {
-        fileSize: 250 * 1024 * 1024 // 250MB
+        fileSize: 100 * 1024 * 1024 // 100MB - works reliably with Cloudinary
     }
 });
 
@@ -129,23 +143,41 @@ app.post('/upload', uploadLimit, upload.single('video'), async (req, res) => {
         }
 
         // Generate cryptographically secure video ID
-        const videoId = crypto.randomBytes(16).toString('hex');
-        const originalFilename = req.file.filename;
-        const newFilename = `${videoId}${path.extname(req.file.filename)}`;
-        
-        // Rename file to secure ID
-        const oldPath = path.join('uploads', originalFilename);
-        const newPath = path.join('uploads', newFilename);
-        fs.renameSync(oldPath, newPath);
+        const videoId = crypto.randomBytes(16).toString('hex');        console.log(`📤 Uploading to Cloudinary: ${req.file.originalname} (${req.file.size} bytes)`);        // Upload to Cloudinary with minimal parameters to avoid sync processing
+        const uploadResult = await new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
+                {
+                    resource_type: 'video',
+                    public_id: `villainarc/clips/${videoId}`,
+                    folder: 'villainarc/clips',
+                    use_filename: false,
+                    unique_filename: true,
+                    overwrite: false
+                    // Removed quality and format to avoid incoming transformations
+                },
+                (error, result) => {
+                    if (error) {
+                        console.error('Cloudinary upload error:', error);
+                        reject(error);
+                    } else {
+                        console.log('✅ Cloudinary upload successful:', result.public_id);
+                        resolve(result);
+                    }
+                }
+            ).end(req.file.buffer);
+        });
 
         const videoData = {
             id: videoId,
             originalName: req.file.originalname,
-            filename: newFilename,
+            cloudinaryUrl: uploadResult.secure_url,
+            cloudinaryPublicId: uploadResult.public_id,
             size: req.file.size,
+            duration: uploadResult.duration,
+            format: uploadResult.format,
             uploadDate: new Date(),
             downloadCount: 0,
-            ip: req.ip // Track for abuse prevention
+            ip: req.ip
         };
 
         videoStore.set(videoId, videoData);
@@ -156,7 +188,7 @@ app.post('/upload', uploadLimit, upload.single('video'), async (req, res) => {
             
         const shareLink = `${baseUrl}/v/${videoId}`;
         const downloadLink = `${baseUrl}/download/${videoId}`;
-        const previewUrl = `${baseUrl}/stream/${videoId}`;
+        const previewUrl = uploadResult.secure_url; // Direct Cloudinary URL
 
         // Send Discord webhook (if URL is properly configured)
         if (DISCORD_WEBHOOK_URL && DISCORD_WEBHOOK_URL.startsWith('https://discord.com/api/webhooks/')) {
@@ -175,11 +207,24 @@ app.post('/upload', uploadLimit, upload.single('video'), async (req, res) => {
             downloadUrl: downloadLink,
             previewUrl,
             filename: videoData.originalName,
-            size: videoData.size
-        });
-
-    } catch (error) {
+            size: videoData.size,
+            duration: videoData.duration
+        });    } catch (error) {
         console.error('Upload error:', error);
+        
+        // Handle specific Cloudinary errors
+        if (error.message && error.message.includes('File size too large')) {
+            return res.status(413).json({ error: 'File too large for upload. Try a smaller file.' });
+        }
+        
+        if (error.message && error.message.includes('Invalid video file')) {
+            return res.status(400).json({ error: 'Invalid video file format.' });
+        }
+        
+        if (error.message && error.message.includes('Upload failed')) {
+            return res.status(500).json({ error: 'Upload to cloud storage failed. Please try again.' });
+        }
+        
         res.status(500).json({ error: 'Upload failed: ' + error.message });
     }
 });
@@ -213,10 +258,9 @@ app.get('/v/:videoId', (req, res) => {
                 <a href="/" style="color: #4dabf7;">Go back to upload</a>
             </body>
             </html>
-        `);
-    }
+        `);    }
 
-    const videoUrl = `/stream/${videoId}`;
+    const videoUrl = videoData.cloudinaryUrl; // Direct Cloudinary URL
     const downloadUrl = `/download/${videoId}`;
 
     res.send(`
@@ -313,38 +357,8 @@ app.get('/stream/:videoId', (req, res) => {
         return res.status(404).json({ error: 'Video not found' });
     }
 
-    const videoPath = path.join(__dirname, 'uploads', videoData.filename);
-    
-    if (!fs.existsSync(videoPath)) {
-        return res.status(404).json({ error: 'Video file not found' });
-    }
-
-    const stat = fs.statSync(videoPath);
-    const fileSize = stat.size;
-    const range = req.headers.range;
-
-    if (range) {
-        const parts = range.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunksize = (end - start) + 1;
-        const file = fs.createReadStream(videoPath, { start, end });
-        const head = {
-            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-            'Accept-Ranges': 'bytes',
-            'Content-Length': chunksize,
-            'Content-Type': 'video/mp4',
-        };
-        res.writeHead(206, head);
-        file.pipe(res);
-    } else {
-        const head = {
-            'Content-Length': fileSize,
-            'Content-Type': 'video/mp4',
-        };
-        res.writeHead(200, head);
-        fs.createReadStream(videoPath).pipe(res);
-    }
+    // Redirect to Cloudinary streaming URL
+    res.redirect(videoData.cloudinaryUrl);
 });
 
 app.get('/download/:videoId', (req, res) => {
@@ -355,15 +369,18 @@ app.get('/download/:videoId', (req, res) => {
         return res.status(404).json({ error: 'Video not found' });
     }
 
-    const videoPath = path.join(__dirname, 'uploads', videoData.filename);
-    
-    if (!fs.existsSync(videoPath)) {
-        return res.status(404).json({ error: 'Video file not found' });
-    }
-
     // Increment download count
     videoData.downloadCount++;
-    videoStore.set(videoId, videoData);    res.download(videoPath, videoData.originalName);
+    videoStore.set(videoId, videoData);
+
+    // Redirect to Cloudinary download URL with original filename
+    const downloadUrl = cloudinary.url(videoData.cloudinaryPublicId, {
+        resource_type: 'video',
+        flags: 'attachment',
+        secure: true
+    });
+    
+    res.redirect(downloadUrl);
 });
 
 // Health check endpoint
@@ -439,18 +456,32 @@ if (process.env.NODE_ENV === 'production') {
 
 // Error handling middleware
 app.use((error, req, res, next) => {
+    console.error('Server error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack.substring(0, 500)
+    });
+    
     if (error instanceof multer.MulterError) {
         if (error.code === 'LIMIT_FILE_SIZE') {
-            return res.status(400).json({ error: 'File too large. Maximum size is 100MB.' });
+            return res.status(400).json({ error: 'File too large. Maximum size is 250MB.' });
         }
+        if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+            return res.status(400).json({ error: 'Unexpected file field.' });
+        }
+        return res.status(400).json({ error: `Upload error: ${error.message}` });
     }
     
-    if (error.message === 'Only video files are allowed!') {
+    if (error.message && error.message.includes('Filename contains invalid characters')) {
+        return res.status(400).json({ error: 'Filename contains invalid characters!' });
+    }
+    
+    if (error.message && error.message.includes('Only video files are allowed')) {
         return res.status(400).json({ error: 'Only video files are allowed!' });
     }
 
-    console.error('Server error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    // Generic server errors
+    res.status(500).json({ error: 'Upload failed. Please try again with a smaller file.' });
 });
 
 app.listen(PORT, () => {
@@ -461,4 +492,4 @@ app.listen(PORT, () => {
     } else {
         console.log('⚠️  Discord webhook not configured (set DISCORD_WEBHOOK_URL environment variable)');
     }
-});
+}).timeout = 10 * 60 * 1000; // 10 minute timeout for large uploads
