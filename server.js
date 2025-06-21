@@ -31,15 +31,15 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
-// Middleware - Enhanced Security
+// Middleware - Enhanced Security with Cloudinary support
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
             scriptSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
-            imgSrc: ["'self'", "data:", "blob:"],
-            mediaSrc: ["'self'", "blob:"],
+            imgSrc: ["'self'", "data:", "blob:", "https://res.cloudinary.com"],
+            mediaSrc: ["'self'", "blob:", "https://res.cloudinary.com"], // Allow Cloudinary videos
             connectSrc: ["'self'"],
             fontSrc: ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
             objectSrc: ["'none'"],
@@ -68,10 +68,19 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '1mb' })); // Keep small for non-file requests
 app.use(express.urlencoded({ extended: true, limit: '1mb' })); // Keep small for non-file requests
 
-// Add request logging for debugging
+// Add detailed request logging for debugging
 app.use((req, res, next) => {
+    console.log(`🌐 ${req.method} ${req.path} - Origin: ${req.get('origin')} - IP: ${req.ip}`);
+    
     if (req.path === '/upload') {
-        console.log(`📤 Upload request - Size: ${req.get('content-length')} bytes, IP: ${req.ip}`);
+        console.log(`📤 Upload request details:`, {
+            method: req.method,
+            path: req.path,
+            origin: req.get('origin'),
+            contentType: req.get('content-type'),
+            contentLength: req.get('content-length'),
+            userAgent: req.get('user-agent')
+        });
     }
     next();
 });
@@ -154,7 +163,7 @@ app.post('/upload', uploadLimit, upload.single('video'), async (req, res) => {
             cloudinary.uploader.upload_stream(
                 {
                     resource_type: 'video',
-                    public_id: `villainarc/clips/${videoId}`,
+                    public_id: `villainarc_clips_${videoId}`, // Flattened naming to avoid nested folders
                     folder: 'villainarc/clips',
                     use_filename: false,
                     unique_filename: true,
