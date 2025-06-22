@@ -150,25 +150,29 @@ class AzureTableSessionStore extends session.Store {
             }
         }
     }
-    
-    async get(sessionId, callback) {
+      async get(sessionId, callback) {
         if (!this.tableClient) {
+            console.error('❌ Azure Table client not available for session get');
             return callback(new Error('Azure Table client not available'));
         }
         
         try {
+            console.log(`🔍 Getting session from Azure: ${sessionId}`);
             const entity = await this.tableClient.getEntity('session', sessionId);
             const sessionData = JSON.parse(entity.data);
             
             // Check if session is expired
             if (entity.expires && new Date(entity.expires) < new Date()) {
+                console.log(`⏰ Session expired: ${sessionId}`);
                 await this.destroy(sessionId, () => {});
                 return callback();
             }
             
+            console.log(`✅ Session found in Azure: ${sessionId}`);
             callback(null, sessionData);
         } catch (error) {
             if (error.statusCode === 404) {
+                console.log(`🔍 Session not found in Azure: ${sessionId}`);
                 callback(); // Session not found
             } else {
                 console.error('❌ Error getting session from Azure:', error.message);
@@ -176,13 +180,14 @@ class AzureTableSessionStore extends session.Store {
             }
         }
     }
-    
-    async set(sessionId, session, callback) {
+      async set(sessionId, session, callback) {
         if (!this.tableClient) {
+            console.error('❌ Azure Table client not available for session save');
             return callback(new Error('Azure Table client not available'));
         }
         
         try {
+            console.log(`💾 Saving session to Azure: ${sessionId}`);
             const expires = new Date(Date.now() + this.ttl);
             const entity = {
                 partitionKey: 'session',
@@ -193,6 +198,7 @@ class AzureTableSessionStore extends session.Store {
             };
             
             await this.tableClient.upsertEntity(entity);
+            console.log(`✅ Session saved to Azure successfully: ${sessionId}`);
             callback();
         } catch (error) {
             console.error('❌ Error saving session to Azure:', error.message);
@@ -263,6 +269,7 @@ class AzureTableSessionStore extends session.Store {
 // Configure session store
 let sessionStore;
 if (accountName && accountKey) {
+    console.log('🔧 Configuring Azure Table Storage session store...');
     sessionStore = new AzureTableSessionStore({
         tableName: 'sessions',
         ttl: 7 * 24 * 60 * 60 * 1000 // 7 days
@@ -271,6 +278,7 @@ if (accountName && accountKey) {
 } else {
     console.log('⚠️  Azure credentials not available - using memory store');
     console.log('💡 Sessions will not persist across server restarts');
+    console.log('💡 Make sure AZURE_STORAGE_ACCOUNT_NAME and AZURE_STORAGE_ACCOUNT_KEY are set in production');
 }
 
 app.use(session({
