@@ -291,7 +291,8 @@ app.use(session({
         secure: process.env.NODE_ENV === 'production', // HTTPS only in production
         httpOnly: true, // Prevent XSS attacks
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (longer for better UX)
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax'
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // Allow cross-site cookies in production
+        domain: process.env.NODE_ENV === 'production' ? undefined : undefined // Let browser handle domain
     }
 }));
 
