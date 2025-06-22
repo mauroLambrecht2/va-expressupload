@@ -293,10 +293,9 @@ app.use(session({
     name: 'villainarc.sid', // Custom session name
     resave: false,
     saveUninitialized: false,
-    proxy: process.env.NODE_ENV === 'production', // Trust proxy in production
-    cookie: {
+    proxy: process.env.NODE_ENV === 'production', // Trust proxy in production    cookie: {
         secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-        httpOnly: false, // Allow frontend to read cookie for debugging
+        httpOnly: true, // Prevent XSS attacks
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (longer for better UX)
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // Allow cross-site cookies in production
         domain: undefined // Let browser handle domain automatically

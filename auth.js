@@ -61,14 +61,12 @@ const setupDiscordAuth = (app) => {
                 });
             }            if (!guildMember.isMember) {
                 console.log(`❌ User ${user.username}#${user.discriminator} is not a member of VillainArc guild`);
-                console.log(`🚧 TEMPORARILY ALLOWING LOGIN FOR DEBUGGING`);
-                // return done(null, false, { message: 'Not a member of VillainArc guild' });
+                return done(null, false, { message: 'Not a member of VillainArc guild' });
             }
 
             if (!guildMember.hasRole) {
                 console.log(`❌ User ${user.username}#${user.discriminator} does not have required role in VillainArc guild`);
-                console.log(`🚧 TEMPORARILY ALLOWING LOGIN FOR DEBUGGING`);
-                // return done(null, false, { message: 'Does not have required role in VillainArc guild' });
+                return done(null, false, { message: 'Does not have required role in VillainArc guild' });
             }
 
             console.log(`✅ VillainArc member authenticated: ${user.username}#${user.discriminator}`);
