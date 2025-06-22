@@ -291,9 +291,9 @@ app.use(session({
     store: sessionStore, // Use custom Azure Table Storage or fallback to memory
     secret: sessionSecret,
     name: 'villainarc.sid', // Custom session name
-    resave: false,
-    saveUninitialized: false,
-    proxy: process.env.NODE_ENV === 'production', // Trust proxy in production    cookie: {
+    resave: false,    saveUninitialized: false,
+    proxy: process.env.NODE_ENV === 'production', // Trust proxy in production
+    cookie: {
         secure: process.env.NODE_ENV === 'production', // HTTPS only in production
         httpOnly: true, // Prevent XSS attacks
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (longer for better UX)
