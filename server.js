@@ -111,6 +111,12 @@ const sessionSecret = process.env.SESSION_SECRET || (() => {
     throw new Error('SESSION_SECRET environment variable is required in production');
 })();
 
+// Debug session configuration
+console.log('🔧 Session Configuration:');
+console.log('Frontend URL:', process.env.FRONTEND_URL);
+console.log('Backend URL:', process.env.BACKEND_URL);
+console.log('Environment:', process.env.NODE_ENV);
+
 // Custom Azure Table Storage session store
 class AzureTableSessionStore extends session.Store {
     constructor(options = {}) {
@@ -287,12 +293,13 @@ app.use(session({
     name: 'villainarc.sid', // Custom session name
     resave: false,
     saveUninitialized: false,
+    proxy: process.env.NODE_ENV === 'production', // Trust proxy in production
     cookie: {
         secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-        httpOnly: true, // Prevent XSS attacks
+        httpOnly: false, // Allow frontend to read cookie for debugging
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (longer for better UX)
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // Allow cross-site cookies in production
-        domain: process.env.NODE_ENV === 'production' ? undefined : undefined // Let browser handle domain
+        domain: undefined // Let browser handle domain automatically
     }
 }));
 
