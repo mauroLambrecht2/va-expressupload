@@ -23,9 +23,12 @@ const app = express();
 // Initialize Azure Storage
 const azureStorage = initializeAzureStorage();
 
-// Initialize Azure configuration
+// Initialize Azure configuration asynchronously (don't block startup)
 if (azureStorage) {
-    initializeAzureConfiguration();
+    initializeAzureConfiguration().catch(error => {
+        console.error('⚠️  Failed to initialize Azure configuration:', error.message);
+        console.log('🔧 Server will continue running, but Azure features may be limited');
+    });
 }
 
 // Security middleware
@@ -99,20 +102,27 @@ app.use((req, res, next) => {
     next();
 });
 
-// Serve React build in production
-if (config.server.nodeEnv === 'production') {
-    // app.use(express.static(path.join(__dirname, '../client/build')));
-} else {
-    app.get('/', (req, res) => {
-        res.json({
-            message: 'VillainArc Video Sharing API',
-            version: '2.0.0',
-            environment: 'development',
-            authConfigured,
-            azureConfigured: !!azureStorage
-        });
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: config.server.nodeEnv,
+        azureConfigured: !!azureStorage
     });
-}
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+    res.json({
+        message: 'VillainArc Video Sharing API',
+        version: '2.0.0',
+        environment: config.server.nodeEnv,
+        authConfigured,
+        azureConfigured: !!azureStorage
+    });
+});
 
 // API rate limiting
 app.use('/api', apiLimit);
