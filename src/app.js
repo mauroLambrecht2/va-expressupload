@@ -120,13 +120,6 @@ app.use('/api', apiLimit);
 // Mount all routes
 app.use('/', routes);
 
-// Serve React app for production (catch-all)
-if (config.server.nodeEnv === 'production') {
-    app.get('*', (req, res) => {
-        res.sendFile(path.join(__dirname, '../client/build/index.html'));
-    });
-}
-
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
