@@ -5,10 +5,10 @@ const crypto = require('crypto');
 const path = require('path');
 const { PassThrough } = require('stream');
 
-// Optimized chunk size for faster uploads (50MB for better throughput)
-const CHUNK_SIZE = 50 * 1024 * 1024; // 50MB chunks for faster upload
+// Optimized chunk size and concurrency for maximum speed
+const CHUNK_SIZE = 100 * 1024 * 1024; // 100MB chunks for better throughput
 const MAX_RETRIES = 3;
-const MAX_CONCURRENT_UPLOADS = 4; // Upload 4 chunks in parallel
+const MAX_CONCURRENT_UPLOADS = 4; // Increase to 8 parallel uploads for speed
 
 /**
  * Upload video using Azure Block Blob streaming with optimized chunked upload
@@ -30,12 +30,11 @@ const uploadVideoStreamToAzure = async (fileStream, fileSize, originalName, user
     const containerClient = blobServiceClient.getContainerClient(config.azure.containerName);
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
 
-    try {
-        // Use optimized upload with concurrent chunks and better buffering
+    try {        // Use optimized upload with maximum concurrency and larger buffers
         const uploadOptions = {
             blockSize: CHUNK_SIZE,
-            concurrency: MAX_CONCURRENT_UPLOADS, // Upload multiple chunks simultaneously
-            maxSingleShotSize: 100 * 1024 * 1024, // Use single upload for files under 100MB
+            concurrency: MAX_CONCURRENT_UPLOADS, // Upload 8 chunks simultaneously for max speed
+            maxSingleShotSize: 256 * 1024 * 1024, // Use single upload for files under 256MB
             progress: (progress) => {
                 const percentage = ((progress.loadedBytes / fileSize) * 100);
                 console.log(`📤 Upload progress for ${videoId}: ${percentage.toFixed(1)}% (${progress.loadedBytes}/${fileSize} bytes)`);
@@ -66,13 +65,11 @@ const uploadVideoStreamToAzure = async (fileStream, fileSize, originalName, user
                 isMKV: (fileExtension.toLowerCase() === '.mkv').toString(),
                 downloadCount: '0'
             }
-        };
-
-        // Upload the stream
+        };        // Upload the stream with maximum concurrency
         const uploadResponse = await blockBlobClient.uploadStream(
             fileStream,
             CHUNK_SIZE,
-            2, // max concurrency
+            MAX_CONCURRENT_UPLOADS, // Use max concurrency for speed
             uploadOptions
         );
 
