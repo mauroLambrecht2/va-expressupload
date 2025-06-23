@@ -116,14 +116,28 @@ const configureAzureCORS = async () => {
             maxAgeInSeconds: 86400 // 24 hours
         }];
 
-        await blobServiceClient.setProperties({
-            cors: corsRules
-        });
+        // Try different API methods for Azure SDK compatibility
+        const serviceProperties = {
+            cors: corsRules,
+            deleteRetentionPolicy: {
+                enabled: false
+            }
+        };
+
+        // Try the correct method for Azure SDK v12
+        if (typeof blobServiceClient.setProperties === 'function') {
+            await blobServiceClient.setProperties(serviceProperties);
+        } else if (typeof blobServiceClient.setBlobServiceProperties === 'function') {
+            await blobServiceClient.setBlobServiceProperties(serviceProperties);
+        } else {
+            throw new Error('No compatible CORS configuration method found');
+        }
         
         console.log('✅ Azure CORS configured successfully');
     } catch (error) {
         console.error('❌ Failed to configure Azure CORS:', error.message);
         console.log('💡 Manual CORS configuration may be required in Azure Portal');
+        console.log('💡 You can configure CORS manually in Azure Portal under your Storage Account > Settings > Resource sharing (CORS)');
     }
 };
 

@@ -34,11 +34,12 @@
     "express-rate-limit": "^7.5.0",
     "express-session": "^1.18.0",
     "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "multer": "^2.0.1",
+    "node-fetch": "^3.3.2",
     "passport": "^0.6.0",
     "passport-discord": "^0.1.4",
-    "node-fetch": "^3.3.2",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

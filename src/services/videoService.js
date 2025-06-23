@@ -119,8 +119,46 @@ const getVideoProperties = async (videoId) => {
     }
 };
 
+// Download video blob as stream with optional range support
+const downloadVideoBlob = async (videoId, startByte = null, endByte = null) => {
+    const blobServiceClient = getBlobServiceClient();
+    const videoData = videoStore.get(videoId);
+
+    if (!videoData || !blobServiceClient) {
+        throw new Error('Video not found or Azure not configured');
+    }
+
+    const containerClient = blobServiceClient.getContainerClient(videoData.containerName);
+    const blockBlobClient = containerClient.getBlockBlobClient(videoData.blobName);
+
+    try {
+        // Check if blob exists
+        const exists = await blockBlobClient.exists();
+        if (!exists) {
+            throw new Error('Video file not found in storage');
+        }
+
+        let downloadResponse;
+        if (startByte !== null && endByte !== null) {
+            // Range download
+            console.log(`📥 Downloading range ${startByte}-${endByte} of ${videoData.blobName}`);
+            downloadResponse = await blockBlobClient.download(startByte, endByte - startByte + 1);
+        } else {
+            // Full download
+            console.log(`📥 Downloading full blob: ${videoData.blobName}`);
+            downloadResponse = await blockBlobClient.download();
+        }
+
+        return downloadResponse.readableStreamBody;
+    } catch (error) {
+        console.error('❌ Error downloading video blob:', error);
+        throw error;
+    }
+};
+
 module.exports = {
     uploadVideoToAzure,
     generateStreamUrl,
-    getVideoProperties
+    getVideoProperties,
+    downloadVideoBlob
 };

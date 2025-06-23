@@ -84,12 +84,11 @@ const recordUpload = (userId, uploadData) => {
     const userData = userStore.get(userId);
     if (userData) {
         userData.totalUploadSize = newUsed;
-        userData.uploads = userData.uploads || [];
-        userData.uploads.push({
+        userData.uploads = userData.uploads || [];        userData.uploads.push({
             id: uploadData.id || uploadData.videoId,
             originalName: uploadData.originalName,
             size: uploadData.size,
-            uploadDate: uploadData.uploadDate?.toISOString() || new Date().toISOString(),
+            uploadDate: uploadData.uploadDate instanceof Date ? uploadData.uploadDate.toISOString() : (uploadData.uploadDate || new Date().toISOString()),
             shareLink: uploadData.shareLink || `/v/${uploadData.id || uploadData.videoId}`
         });
         userStore.set(userId, userData);

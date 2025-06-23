@@ -16,6 +16,9 @@ router.post('/upload',
     videoController.uploadVideo
 );
 
+// Debug endpoint
+router.get('/debug/videos', videoController.debugVideos);
+
 // View/embed route for clips
 router.get('/v/:videoId', videoController.viewVideo);
 router.get('/download/:videoId', videoController.downloadVideo);

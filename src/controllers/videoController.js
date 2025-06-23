@@ -120,13 +120,26 @@ const uploadVideoAsync = async (file, user, ip, uploadId) => {
     }
 };
                 
-// Stream video (redirect to SAS URL)
+// Stream video (redirect to SAS URL like the working server)
 const streamVideo = async (req, res) => {
     const { videoId } = req.params;
+    const videoData = videoStore.get(videoId);
+    
+    if (!videoData) {
+        return res.status(404).json({ error: 'Video not found' });
+    }
     
     try {
-        const sasUrl = await generateStreamUrl(videoId);
-        res.redirect(302, sasUrl);
+        const { generateStreamUrl } = require('../services/videoService');
+        
+        // Generate a SAS URL for direct streaming (like the working server)
+        const streamUrl = await generateStreamUrl(videoId);
+        
+        console.log(`🎬 Redirecting to SAS URL for ${videoId}`);
+        
+        // Redirect to the SAS URL for direct Azure streaming
+        res.redirect(streamUrl);
+        
     } catch (error) {
         console.error('❌ Video streaming error:', error);
         
@@ -603,9 +616,7 @@ const viewVideo = (req, res) => {
             </div>
             
             <div class="main-content">
-                <div class="video-container">
-                    <h1 class="video-title">${videoData.originalName}</h1>
-                    <div class="video-wrapper" style="position: relative;">
+                <div class="video-container">                    <h1 class="video-title">${videoData.originalName}</h1>                    <div class="video-wrapper" style="position: relative;">
                         <video 
                             id="mainVideo"
                             controls 
@@ -617,8 +628,7 @@ const viewVideo = (req, res) => {
                                 Your browser does not support the video tag. 
                                 <a href="${downloadUrl}" style="color: #5865f2;">Download the video instead</a>
                             </p>
-                        </video>
-                        <div id="loadingStatus" style="display: none; position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                        </video>                        <div id="loadingStatus" style="display: none; position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 0.5rem; border-radius: 4px; font-size: 0.8rem;">
                             Loading...
                         </div>
                     </div>
@@ -667,15 +677,15 @@ const viewVideo = (req, res) => {
                         📤 Upload Another
                     </a>
                 </div>
-            </div>
-            <script>
-                // Simple video loading with MKV support
+            </div>            <script>
                 const video = document.getElementById('mainVideo');
                 const loadingStatus = document.getElementById('loadingStatus');
                 const avatarImg = document.getElementById('avatarImg');
                 
-                // Check if this is an MKV file
-                const isMKV = '${videoData.fileFormat}' === '.mkv' || ${videoData.isMKV || false};
+                console.log('🎬 Video page loaded');
+                console.log('📹 Video URL:', '${videoUrl}');
+                console.log('📁 Original name:', '${videoData.originalName}');
+                console.log('📊 Content type:', '${videoData.contentType}');
                 
                 // Handle avatar image error
                 if (avatarImg) {
@@ -685,42 +695,19 @@ const viewVideo = (req, res) => {
                 }
                 
                 if (video && loadingStatus) {
-                    // Force video to try multiple formats for MKV compatibility
-                    if (isMKV) {
-                        console.log('🎬 MKV file detected - setting up enhanced compatibility');
-                        
-                        // Add multiple source elements for better compatibility
-                        const videoUrl = '${videoUrl}';
-                        video.innerHTML = \`
-                            <source src="\${videoUrl}" type="video/mp4">
-                            <source src="\${videoUrl}" type="video/x-matroska">
-                            <source src="\${videoUrl}" type="video/webm">
-                            <p style="color: #ff6b6b; text-align: center; padding: 2rem;">
-                                Your browser does not support this video format. 
-                                <a href="${downloadUrl}" style="color: #5865f2;">Download the video instead</a>
-                            </p>
-                        \`;
-                        
-                        // Set video properties for better MKV handling
-                        video.preload = 'metadata';
-                        video.crossOrigin = 'anonymous';
-                    }
+                    let hasTriedWithoutCORS = false;
                     
                     // Show loading status
                     video.addEventListener('loadstart', () => {
                         console.log('🎥 Video loading started');
-                        loadingStatus.textContent = 'Loading...';
+                        loadingStatus.textContent = 'Loading video...';
                         loadingStatus.style.display = 'block';
                     });
                     
                     video.addEventListener('loadedmetadata', () => {
-                        console.log('📊 Video metadata loaded, duration:', video.duration);
-                        loadingStatus.textContent = 'Metadata loaded';
-                    });
-                    
-                    video.addEventListener('loadeddata', () => {
-                        console.log('📁 Video data loaded');
-                        loadingStatus.textContent = 'Data loaded';
+                        console.log('📊 Video metadata loaded, duration:', video.duration, 'seconds');
+                        loadingStatus.textContent = 'Video ready';
+                        setTimeout(() => loadingStatus.style.display = 'none', 1000);
                     });
                     
                     video.addEventListener('canplay', () => {
@@ -728,80 +715,75 @@ const viewVideo = (req, res) => {
                         loadingStatus.style.display = 'none';
                     });
                     
-                    video.addEventListener('canplaythrough', () => {
-                        console.log('🎬 Video can play through');
-                        loadingStatus.style.display = 'none';
-                    });
-                    
-                    video.addEventListener('progress', () => {
-                        if (video.buffered.length > 0) {
-                            const buffered = video.buffered.end(0);
-                            const duration = video.duration;
-                            if (duration > 0) {
-                                const percent = Math.round((buffered / duration) * 100);
-                                if (loadingStatus.style.display !== 'none') {
-                                    loadingStatus.textContent = \`Buffered: \${percent}%\`;
-                                }
-                            }
-                        }
-                    });
-                    
                     video.addEventListener('error', async (e) => {
                         console.error('❌ Video error:', e);
                         const error = video.error;
                         
                         let errorMessage = 'Error loading video';
+                        let shouldRetryWithoutCORS = false;
                         
                         if (error) {
+                            console.error('Video error details:', {
+                                code: error.code,
+                                message: error.message,
+                                MEDIA_ERR_ABORTED: error.MEDIA_ERR_ABORTED,
+                                MEDIA_ERR_NETWORK: error.MEDIA_ERR_NETWORK,
+                                MEDIA_ERR_DECODE: error.MEDIA_ERR_DECODE,
+                                MEDIA_ERR_SRC_NOT_SUPPORTED: error.MEDIA_ERR_SRC_NOT_SUPPORTED
+                            });
+                            
                             switch(error.code) {
                                 case error.MEDIA_ERR_ABORTED:
                                     errorMessage = 'Video loading was aborted';
                                     break;
                                 case error.MEDIA_ERR_NETWORK:
                                     errorMessage = 'Network error while loading video';
+                                    shouldRetryWithoutCORS = true;
                                     break;
                                 case error.MEDIA_ERR_DECODE:
                                     errorMessage = 'Video format not supported by your browser';
                                     break;
                                 case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
                                     errorMessage = 'Video source not supported';
+                                    shouldRetryWithoutCORS = true;
                                     break;
                                 default:
                                     errorMessage = 'Unknown video error occurred';
+                                    shouldRetryWithoutCORS = true;
                             }
                         }
                         
+                        // Try without CORS if we haven't tried yet and it's a network/CORS-related error
+                        if (shouldRetryWithoutCORS && !hasTriedWithoutCORS && video.crossOrigin) {
+                            console.log('🔄 Retrying without CORS...');
+                            hasTriedWithoutCORS = true;
+                            video.removeAttribute('crossorigin');
+                            video.load(); // Reload the video
+                            return;
+                        }
+                        
                         loadingStatus.innerHTML = \`
-                            <div style="color: #ff6b6b;">
+                            <div style="color: #ff6b6b; text-align: center;">
                                 ❌ \${errorMessage}<br>
-                                <a href="${downloadUrl}" style="color: #5865f2; text-decoration: underline;">Download instead</a>
+                                <small style="color: #ccc;">Error code: \${error ? error.code : 'unknown'}</small><br>
+                                <a href="${downloadUrl}" style="color: #5865f2; text-decoration: underline; margin-top: 0.5rem; display: inline-block;">Download video instead</a>
                             </div>
                         \`;
                         loadingStatus.style.display = 'block';
                     });
                     
                     // Test if the stream URL is accessible
-                    console.log('🔗 Testing stream URL:', videoUrl);
-                    fetch(videoUrl, { 
+                    console.log('🔗 Testing stream URL accessibility...');
+                    fetch('${videoUrl}', { 
                         method: 'HEAD',
-                        mode: 'cors'
+                        mode: 'no-cors' // Use no-cors mode to avoid CORS issues in the test
                     })
                     .then(response => {
-                        console.log('📡 Stream URL test response:', response.status, response.statusText);
-                        console.log('📋 Response headers:', Array.from(response.headers.entries()));
-                        if (!response.ok) {
-                            throw new Error(\`Stream not accessible: \${response.status} \${response.statusText}\`);
-                        }
+                        console.log('📡 Stream URL test - status:', response.status || 'opaque');
+                        console.log('� Stream URL test - type:', response.type);
                     })
                     .catch(error => {
-                        console.error('🚫 Stream URL test failed:', error);
-                        loadingStatus.innerHTML = \`
-                            <div style="color: #ff6b6b;">
-                                🚫 Stream not accessible<br>
-                                <a href="${downloadUrl}" style="color: #5865f2; text-decoration: underline;">Download instead</a>
-                            </div>
-                        \`;
-                        loadingStatus.style.display = 'block';
+                        console.warn('� Stream URL test failed (this might be normal due to CORS):', error.message);
                     });
                 }
             </script>
@@ -837,11 +819,36 @@ const downloadVideo = async (req, res) => {
     }
 };
 
+// Debug endpoint to list videos
+const debugVideos = (req, res) => {
+    try {
+        const videos = Array.from(videoStore.entries()).map(([id, data]) => ({
+            id,
+            originalName: data.originalName,
+            size: data.size,
+            contentType: data.contentType,
+            uploadDate: data.uploadDate,
+            uploaderUsername: data.uploaderUsername
+        }));
+        
+        res.json({
+            success: true,
+            count: videos.length,
+            videos: videos.slice(0, 10), // Show first 10
+            totalCount: videoStore.size
+        });
+    } catch (error) {
+        console.error('Debug videos error:', error);
+        res.status(500).json({ error: 'Failed to list videos' });
+    }
+};
+
 module.exports = {
     uploadVideo,
     streamVideo,
     getVideoHead,
     handleCorsOptions,
     viewVideo,
-    downloadVideo
+    downloadVideo,
+    debugVideos
 };
