@@ -24,7 +24,7 @@ router.post('/get-azure-upload-token', async (req, res) => {
             quota: req.user.quota || 5 * 1024 * 1024 * 1024, // 5GB default
             totalUploadSize: req.user.totalUploadSize || 0,
             exp: Math.floor(Date.now() / 1000) + (60 * 60) // 1 hour expiry
-        }, process.env.SESSION_SECRET); // Use existing session secret
+        }, process.env.JWT_SECRET); // Use JWT secret that matches Azure Functions
 
         res.json({
             success: true,
