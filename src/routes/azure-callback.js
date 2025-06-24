@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { videoStore, userStore } = require('../config/database');
 const { recordUpload } = require('../middleware/auth');
 const { sendDiscordWebhook } = require('../services/discordService');
+const userQuotaService = require('../services/userQuotaService');
 
 // Store video metadata from Azure Functions after successful upload
 router.post('/store-video-metadata', async (req, res) => {
