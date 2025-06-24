@@ -18,7 +18,14 @@ router.post('/generate-sas-url', requireAuth, async (req, res) => {
     if (filesize > 500 * 1024 * 1024) {
       return res.status(400).json({ error: 'File size exceeds 500MB limit' });
     }
-    // Optionally: check user quota here
+
+    // Check user quota before issuing SAS URL
+    const userQuotaService = require('../services/userQuotaService');
+    const userId = req.user.id;
+    const canUpload = await userQuotaService.canUserUpload(userId, filesize);
+    if (!canUpload) {
+      return res.status(403).json({ error: 'Insufficient quota for this upload.' });
+    }
 
     const blobServiceClient = getBlobServiceClient();
     const sharedKeyCredential = getSharedKeyCredential();
