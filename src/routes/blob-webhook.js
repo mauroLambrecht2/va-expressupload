@@ -24,6 +24,11 @@ router.post('/blob-upload-complete', requireAuth, async (req, res) => {
       uploadedBy: req.user.id,
       uploaderUsername: req.user.username,
       uploadDate: new Date().toISOString(),
+      // Add required fields for videoService and streaming
+      containerName: config.azure.containerName,
+      contentType: 'video/mp4', // or detect from file extension
+      fileFormat: originalName.split('.').pop(),
+      isMKV: originalName.split('.').pop() === 'mkv',
     };
     videoStore.set(videoId, videoData);
     // Send Discord webhook
