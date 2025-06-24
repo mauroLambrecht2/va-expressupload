@@ -32,7 +32,8 @@ router.post('/blob-upload-complete', requireAuth, async (req, res) => {
     };
     videoStore.set(videoId, videoData);
     // Send Discord webhook
-    const shareLink = `${config.server.frontendUrl}/v/${videoId}`;
+    // Always use backendUrl for shareLink, never frontendUrl
+    const shareLink = `${config.server.backendUrl}/v/${videoId}`;
     await sendDiscordWebhook(shareLink, videoData);
     res.json({ success: true, videoId, shareLink });
   } catch (error) {
