@@ -13,7 +13,9 @@ router.post('/blob-upload-complete', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Missing blobName, originalName, or size' });
     }
     // Store video metadata (simplified, you may want to add more fields)
-    const videoId = blobName;
+    // Only use a UUID as the videoId and blobName (no original filename in the id)
+    const uuid = blobName.split('-')[0]; // Assumes blobName is `${uuid}-${filename}`
+    const videoId = uuid;
     const blobUrl = `https://${config.azure.accountName}.blob.core.windows.net/${config.azure.containerName}/${blobName}`;
     const videoData = {
       id: videoId,
